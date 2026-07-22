@@ -288,6 +288,13 @@ function initCircles() {
       circles.push({ baseR: r, squashY: 1.0, scale: 0, rotation: 0, type: 'vennTop', baseY: cy - offset, x: cx, y: cy - offset });
       circles.push({ baseR: r, squashY: 1.0, scale: 0, rotation: 0, type: 'vennBottom', baseY: cy + offset, x: cx, y: cy + offset });
     }
+  } else if (mode === 'vertical') {
+    const offset = (maxR * 0.3) * spreadF;
+    for (let i = 0; i < num; i++) {
+      let r = maxR * Math.pow(scaleF, i);
+      let yPos = cy + (i - num / 2) * offset;
+      circles.push({ baseR: r * 1.3, squashY: 0.35, scale: 0, rotation: 0, type: 'shaft', baseY: yPos, x: cx, y: yPos });
+    }
   } else if (mode === 'concentric') {
     for (let i = 0; i < num; i++) {
       let r = maxR * Math.pow(scaleF, i);
@@ -507,6 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modeItems = [
     {label: 'Concentric', value: 'concentric'},
     {label: 'Vertical Venn (Organic)', value: 'venn'},
+    {label: 'Vertical Stack', value: 'vertical'},
     {label: 'Phyllotaxis Spiral', value: 'phyll'},
     {label: 'Infinity (Lemniscate)', value: 'infinity'}
   ];
