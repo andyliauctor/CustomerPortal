@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSAP Generative Canvas (Advanced UI)</title>
+  <link rel="stylesheet" href="style.css">
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://unpkg.com/webm-muxer/build/webm-muxer.js"></script>
+</head>
+<body>
+
+  <div id="controls">
+    <h3>Motion Generator</h3>
+    
+    <div class="ui-panel">
+      <span class="control-label">Pattern:</span>
+      <div class="custom-select" id="select-pattern">
+        <div class="select-selected">Concentric</div>
+        <div class="select-items select-hide"></div>
+      </div>
+    </div>
+
+    <div class="ui-panel">
+      <span class="control-label">Aspect Ratio:</span>
+      <div class="custom-select" id="select-aspect">
+        <div class="select-selected">Fill Screen</div>
+        <div class="select-items select-hide"></div>
+      </div>
+    </div>
+
+    <div class="ui-panel">
+      <span class="control-label">Palette Settings:</span>
+      <div id="ui-color-swatches">
+        </div>
+    </div>
+
+    <div class="ui-panel" id="slider-container-complexity">
+      <div class="slider-header">Complexity <span id="val-complexity">6</span></div>
+      <div class="custom-slider"><div class="custom-slider-track"><div class="custom-slider-fill"></div></div><div class="custom-slider-thumb"></div></div>
+    </div>
+    
+    <div class="ui-panel" id="slider-container-scale">
+      <div class="slider-header">Scale Factor <span id="val-scale">0.75</span></div>
+      <div class="custom-slider"><div class="custom-slider-track"><div class="custom-slider-fill"></div></div><div class="custom-slider-thumb"></div></div>
+    </div>
+
+    <div class="ui-panel" id="slider-container-spread">
+      <div class="slider-header">Spread Factor <span id="val-spread">1.2</span></div>
+      <div class="custom-slider"><div class="custom-slider-track"><div class="custom-slider-fill"></div></div><div class="custom-slider-thumb"></div></div>
+    </div>
+
+    <div class="ui-panel" id="slider-container-dotsize">
+      <div class="slider-header">Dot Size <span id="val-dotsize">3.0</span></div>
+      <div class="custom-slider"><div class="custom-slider-track"><div class="custom-slider-fill"></div></div><div class="custom-slider-thumb"></div></div>
+    </div>
+
+    <hr>
+    <button id="restartBtn">Replay Animation</button>
+    
+    <div class="export-row">
+      <button id="exportPngBtn">Snapshot</button>
+      <button id="exportBtn" class="export-mode">Export 2K</button>
+    </div>
+    <span id="recordingStatus" class="hidden">🔴 Preparing 2K...</span>
+  </div>
+
+  <canvas id="generativeCanvas"></canvas>
+
+  <script src="sketch.js"></script>
+</body>
+</html>
