@@ -17,6 +17,7 @@ const BASE_CELL_SIZE = 10;
 let numCirclesVal = 3;
 let speedVal = 1.10;
 let spacingVal = 0.20; 
+let easingVal = 1.0; // Acts as an exponent curve for the spacing distribution
 let opacityVal = 0.20; 
 let dotSizeVal = 3.00;
 let thicknessVal = 95; 
@@ -57,15 +58,13 @@ function applyCustomSlider(slotId, cfg) {
 
   function updateUI(val) {
     const pct = (val - cfg.min) / (cfg.max - cfg.min);
-    // Updated math for smaller 8px thumb + 2px borders (10px total width)
     fill.style.width = `calc(${pct * 100}% - ${pct * 10}px + 5px)`;
     thumb.style.left = `calc(${pct * 100}% - ${pct * 10}px)`;
-    if (valDisplay) valDisplay.innerText = Number(val).toFixed(cfg.step < 1 ? 2 : 0);
+    if (valDisplay) valDisplay.innerText = Number(val).toFixed(cfg.step < 1 ? 2 : 1); // Allow 1 decimal place
   }
 
   function calculateValue(clientX) {
     const rect = track.getBoundingClientRect();
-    // Updated math for smaller 8px thumb
     let pct = (clientX - (rect.left + 5)) / (rect.width - 10);
     pct = Math.max(0, Math.min(1, pct));
     let rawVal = cfg.min + pct * (cfg.max - cfg.min);
@@ -253,18 +252,27 @@ function playAnimation() {
   globalTime = 0; 
 
   const duration = 6.0 / speedVal;
-  const staggerDelay = (duration / circles.length) * spacingVal; 
   const maxRadius = Math.max(canvas.width, canvas.height);
+  
+  // Calculate the maximum possible stagger window based on spacing value
+  const maxStagger = (circles.length > 1 ? circles.length - 1 : 1) * ((duration / circles.length) * spacingVal);
 
   circles.forEach((c, i) => {
-    const startTime = i * staggerDelay;
+    // Normalize position in the sequence from 0.0 to 1.0
+    const progress = circles.length > 1 ? i / (circles.length - 1) : 0;
+    
+    // Apply the spatial easing exponent to determine the spawn distribution
+    const curve = Math.pow(progress, parseFloat(easingVal)); 
+    
+    // This dynamically clusters the start times, creating true spacing differences between rings
+    const startTime = curve * maxStagger;
     
     masterTimeline.fromTo(c, {
       radius: parseFloat(startRadiusVal)
     }, {
       radius: maxRadius,
       duration: duration,
-      ease: "power2.out" 
+      ease: "power2.out" // Restore the natural physics of a ripple
     }, startTime);
 
     masterTimeline.fromTo(c, {
@@ -496,6 +504,9 @@ document.addEventListener('DOMContentLoaded', () => {
   applyCustomSlider('speed', { min: 0.2, max: 3.0, step: 0.1, val: speedVal, onChange: (v) => { speedVal = v; updateAndPlay(); }});
   applyCustomSlider('spacing', { min: 0.2, max: 3.0, step: 0.1, val: spacingVal, onChange: (v) => { spacingVal = v; updateAndPlay(); }});
   
+  // Adjusted range from 0.1 (strong outer clump) to 3.0 (strong inner clump)
+  applyCustomSlider('easing', { min: 0.1, max: 3.0, step: 0.1, val: easingVal, onChange: (v) => { easingVal = v; updateAndPlay(); }});
+  
   applyCustomSlider('opacity', { min: 0.0, max: 1.0, step: 0.05, val: opacityVal, onChange: (v) => { opacityVal = v; updateAndPlay(); }});
   applyCustomSlider('dotsize', { min: 1, max: 10, step: 0.5, val: dotSizeVal, onChange: (v) => { dotSizeVal = v; updateAndPlay(); }});
   applyCustomSlider('thickness', { min: 10, max: 200, step: 1, val: thicknessVal, onChange: (v) => { thicknessVal = v; updateAndPlay(); }});
@@ -503,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
   applyCustomSlider('startradius', { min: 0, max: 200, step: 1, val: startRadiusVal, onChange: (v) => { startRadiusVal = v; updateAndPlay(); }});
 
   renderColorRows();
-  checkTheme(); // Initialize theme on load
+  checkTheme(); 
   setupInitialCanvas();
   initCircles();
   playAnimation();
