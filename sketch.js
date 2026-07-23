@@ -15,12 +15,12 @@ const BASE_CELL_SIZE = 10;
 
 // --- GENERATOR STATE VARIABLES ---
 let numCirclesVal = 3;
-let speedVal = 1.10;
+let speedVal = .90;
 let spacingVal = 0.20; 
-let easingVal = 1.0; // Acts as an exponent curve for the spacing distribution
+let easingVal = .60; // Acts as an exponent curve for the spacing distribution
 let opacityVal = 0.20; 
-let dotSizeVal = 3.00;
-let thicknessVal = 95; 
+let dotSizeVal = 3.50;
+let thicknessVal = 175; 
 let startRadiusVal = 0; 
 
 let currentBgColor = '#FFF6E5'; 
