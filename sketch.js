@@ -1,23 +1,26 @@
+// noprotect
+
 const canvas = document.getElementById('generativeCanvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
 let circles = [];
-let animationTimeline;
+let masterTimeline = null;
 let globalTime = 0; 
 
 let rafId = null;
 let isPreviewing = true;
 let isRecordingVideo = false; 
 
-const CELL_SIZE = 10; 
+const BASE_CELL_SIZE = 10; 
 
 // --- GENERATOR STATE VARIABLES ---
-let currentPattern = 'concentric'; 
-let currentAspectRatio = 'fill';
-let numCirclesVal = 6;
-let scaleFactorVal = 0.75;
-let spreadFactorVal = 1.2;
-let dotSizeVal = 3.0;
+let numCirclesVal = 3;
+let speedVal = 1.10;
+let spacingVal = 0.20; 
+let opacityVal = 0.20; 
+let dotSizeVal = 3.00;
+let thicknessVal = 95; 
+let startRadiusVal = 0; 
 
 let currentBgColor = '#FFF6E5'; 
 let currentColor1 = '#FFE4B2';  
@@ -32,63 +35,13 @@ const BRAND_PALETTE = [
 ];
 
 function closeAllDropdowns() {
-  document.querySelectorAll('.select-items').forEach(item => item.classList.add('select-hide'));
-  document.querySelectorAll('.select-selected').forEach(btn => btn.classList.remove('active'));
   const picker = document.getElementById('custom-color-picker');
   if (picker) picker.style.display = 'none';
-  document.querySelectorAll('.ui-panel').forEach(panel => panel.style.zIndex = '');
 }
 
 document.addEventListener("click", function(e) {
-  if (!e.target.matches('.select-selected') && !e.target.closest('#custom-color-picker')) closeAllDropdowns();
+  if (!e.target.closest('#custom-color-picker')) closeAllDropdowns();
 });
-
-function applyDropdown(selectId, items, defaultVal, callback) {
-  const select = document.getElementById(selectId);
-  if(!select) return;
-  let btn = select.querySelector('.select-selected');
-  let dropdown = select.querySelector('.select-items');
-  if(!btn || !dropdown) return;
-  
-  const newBtn = btn.cloneNode(true);
-  btn.replaceWith(newBtn);
-  btn = newBtn;
-  
-  btn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    const isOpening = dropdown.classList.contains('select-hide');
-    closeAllDropdowns();
-    if (isOpening) {
-      btn.classList.add('active');
-      dropdown.classList.remove('select-hide');
-      dropdown.style.position = 'absolute';
-      dropdown.style.top = 'calc(100% + 4px)'; 
-      dropdown.style.left = '0px';
-      dropdown.style.width = '100%';
-      const parentPanel = select.closest('.ui-panel');
-      if (parentPanel) parentPanel.style.zIndex = '999';
-    }
-  });
-
-  dropdown.innerHTML = '';
-  items.forEach(item => {
-    const div = document.createElement('div');
-    div.innerText = item.label;
-    div.addEventListener('click', function(e) {
-      e.stopPropagation();
-      btn.innerText = item.label;
-      callback(item.value);
-      dropdown.classList.add('select-hide');
-      btn.classList.remove('active');
-      const parentPanel = select.closest('.ui-panel');
-      if (parentPanel) parentPanel.style.zIndex = '';
-    });
-    dropdown.appendChild(div);
-  });
-  
-  const defItem = items.find(i => i.value === defaultVal) || items[0];
-  if (defItem) btn.innerText = defItem.label;
-}
 
 function applyCustomSlider(slotId, cfg) {
   const container = document.getElementById('slider-container-' + slotId);
@@ -104,14 +57,16 @@ function applyCustomSlider(slotId, cfg) {
 
   function updateUI(val) {
     const pct = (val - cfg.min) / (cfg.max - cfg.min);
-    fill.style.width = `calc(${pct * 100}% - ${pct * 12}px + 6px)`;
-    thumb.style.left = `calc(${pct * 100}% - ${pct * 12}px)`;
+    // Updated math for smaller 8px thumb + 2px borders (10px total width)
+    fill.style.width = `calc(${pct * 100}% - ${pct * 10}px + 5px)`;
+    thumb.style.left = `calc(${pct * 100}% - ${pct * 10}px)`;
     if (valDisplay) valDisplay.innerText = Number(val).toFixed(cfg.step < 1 ? 2 : 0);
   }
 
   function calculateValue(clientX) {
     const rect = track.getBoundingClientRect();
-    let pct = (clientX - (rect.left + 6)) / (rect.width - 12);
+    // Updated math for smaller 8px thumb
+    let pct = (clientX - (rect.left + 5)) / (rect.width - 10);
     pct = Math.max(0, Math.min(1, pct));
     let rawVal = cfg.min + pct * (cfg.max - cfg.min);
     let snappedVal = Math.round(rawVal / cfg.step) * cfg.step;
@@ -157,8 +112,32 @@ function applyCustomSlider(slotId, cfg) {
 }
 
 // --- COLOR PICKER LOGIC ---
+function hexToRgb(hex) {
+  hex = hex.replace(/^#/, '');
+  let bigint = parseInt(hex, 16);
+  if (hex.length === 3) {
+      bigint = parseInt(hex.split('').map(x => x+x).join(''), 16);
+  }
+  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+}
+
+// Automatically switch UI text to white if background is dark
+function checkTheme() {
+  let rgb = hexToRgb(currentBgColor);
+  let luminance = (rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114);
+  const controls = document.getElementById('controls');
+  if (luminance < 130) {
+    controls.classList.add('dark-theme');
+  } else {
+    controls.classList.remove('dark-theme');
+  }
+}
+
 window.updateGlobalColor = function(type, hex) {
-  if (type === 'bg') currentBgColor = hex;
+  if (type === 'bg') {
+    currentBgColor = hex;
+    checkTheme();
+  }
   if (type === 'c1') currentColor1 = hex;
   if (type === 'c2') currentColor2 = hex;
 
@@ -167,7 +146,7 @@ window.updateGlobalColor = function(type, hex) {
   const swatch = document.getElementById(`swatch-color-${type}`);
   if(swatch) swatch.style.background = hex;
   
-  if(isPreviewing && !isRecordingVideo) renderFrame();
+  if(isPreviewing && !isRecordingVideo) updateAndPlay(); 
 }
 
 window.openCustomColorPicker = function(e, type, currentHex) {
@@ -187,8 +166,6 @@ window.openCustomColorPicker = function(e, type, currentHex) {
 
   e.currentTarget.appendChild(picker);
   picker.style.display = '';
-  const parentPanel = e.currentTarget.closest('.ui-panel');
-  if (parentPanel) parentPanel.style.zIndex = '999';
 
   let gridHTML = '<div class="custom-picker-grid">';
   BRAND_PALETTE.forEach(hex => {
@@ -226,7 +203,7 @@ function renderColorRows() {
       <div class="color-row" onclick="window.openCustomColorPicker(event, '${type}', '${h}')">
         <div class="color-left">
           <span class="swatch" id="swatch-color-${type}" style="background:${h};"></span>
-          <span style="color:#aaa; font-size:10px; font-weight:bold; margin-right:4px;">${labelStr}</span>
+          <span style="opacity:0.6; font-size:9.5px; font-weight:bold; margin-right:4px;">${labelStr}</span>
           <span id="swatch-label-${type}">${h.replace('#','')}</span>
         </div>
         <span class="pct">100%</span>
@@ -241,112 +218,67 @@ function renderColorRows() {
 }
 
 // --- GENERATOR LOGIC ---
-function hexToRgb(hex) {
-  hex = hex.replace(/^#/, '');
-  let bigint = parseInt(hex, 16);
-  if (hex.length === 3) {
-      bigint = parseInt(hex.split('').map(x => x+x).join(''), 16);
-  }
-  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
-}
 
 function updateAndPlay() { 
-  resizeCanvas(); 
   initCircles(); 
   playAnimation(); 
 }
 
-function resizeCanvas() {
-  let targetW = window.innerWidth;
-  let targetH = window.innerHeight;
-
-  if (currentAspectRatio !== 'fill') {
-    const parts = currentAspectRatio.split(':');
-    const ratio = parseInt(parts[0]) / parseInt(parts[1]);
-    if (targetW / targetH > ratio) targetW = targetH * ratio;
-    else targetH = targetW / ratio;
-  }
-
-  canvas.width = Math.floor(targetW / 2) * 2;
-  canvas.height = Math.floor(targetH / 2) * 2;
+function setupInitialCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 
 function initCircles() {
   circles = [];
-  const mode = currentPattern;
-
   const num = parseInt(numCirclesVal);
-  const scaleF = parseFloat(scaleFactorVal);
-  const spreadF = parseFloat(spreadFactorVal);
-  const maxR = Math.min(canvas.width, canvas.height) * 0.35;
   const cx = canvas.width / 2, cy = canvas.height / 2;
 
-  if (mode === 'venn') {
-    const offset = (maxR * 0.4) * spreadF; 
-    for (let i = 0; i < num; i++) {
-      let r = (maxR * 0.8) * Math.pow(scaleF, i);
-      circles.push({ baseR: r, squashY: 1.0, scale: 0, rotation: 0, type: 'vennTop', baseY: cy - offset, x: cx, y: cy - offset });
-      circles.push({ baseR: r, squashY: 1.0, scale: 0, rotation: 0, type: 'vennBottom', baseY: cy + offset, x: cx, y: cy + offset });
-    }
-  } else if (mode === 'vertical') {
-    const offset = (maxR * 0.3) * spreadF;
-    for (let i = 0; i < num; i++) {
-      let r = maxR * Math.pow(scaleF, i);
-      let yPos = cy + (i - num / 2) * offset;
-      circles.push({ baseR: r * 1.3, squashY: 0.35, scale: 0, rotation: 0, type: 'shaft', baseY: yPos, x: cx, y: yPos });
-    }
-  } else if (mode === 'concentric') {
-    for (let i = 0; i < num; i++) {
-      let r = maxR * Math.pow(scaleF, i);
-      circles.push({ baseR: r * 1.5, squashY: 0.45, scale: 0, rotation: 0, type: 'rift', baseY: cy, x: cx, y: cy });
-    }
-  } else if (mode === 'phyll') {
-    let count = Math.floor(num * 1.5);
-    for (let i = 0; i < count; i++) {
-      let a = i * 137.5 * (Math.PI / 180);
-      let r = maxR * Math.pow(scaleF, i / 1.5);
-      let offsetDist = (maxR * 0.25) * spreadF * Math.sqrt(i / count);
-      circles.push({ baseR: r, squashY: 1.0, scale: 0, rotation: 0, type: 'spiral', baseY: cy + Math.sin(a)*offsetDist, x: cx + Math.cos(a)*offsetDist, y: cy + Math.sin(a)*offsetDist });
-    }
-  } else if (mode === 'infinity') {
-    const offset = (maxR * 0.55) * spreadF; 
-    for (let i = 0; i < num; i++) {
-      let r = (maxR * 0.75) * Math.pow(scaleF, i);
-      circles.push({ baseR: r, squashY: 0.9, scale: 0, rotation: 0, type: 'infLeft', baseY: cy, x: cx - offset, y: cy });
-      circles.push({ baseR: r, squashY: 0.9, scale: 0, rotation: 0, type: 'infRight', baseY: cy, x: cx + offset, y: cy });
-    }
+  for (let i = 0; i < num; i++) {
+    circles.push({ radius: 0, alpha: 0, x: cx, y: cy });
   }
-  circles.sort((a, b) => b.baseR - a.baseR);
 }
 
 function playAnimation() {
-  if (animationTimeline) animationTimeline.kill();
+  if (masterTimeline) masterTimeline.kill();
+  masterTimeline = gsap.timeline();
+  
   gsap.killTweensOf(circles);
-  circles.forEach(c => { c.scale = 0; });
+  
+  circles.forEach(c => { 
+    c.radius = parseFloat(startRadiusVal); 
+    c.alpha = 0; 
+  });
+  
   globalTime = 0; 
 
-  animationTimeline = gsap.timeline();
-  let staggerTime = Math.min(0.03, 1 / (circles.length || 1));
-  const breathDuration = 3.0; 
+  const duration = 6.0 / speedVal;
+  const staggerDelay = (duration / circles.length) * spacingVal; 
+  const maxRadius = Math.max(canvas.width, canvas.height);
 
-  animationTimeline.to(circles, { scale: 1, duration: 1.5, ease: "power3.out", stagger: { each: staggerTime, from: "center" } });
+  circles.forEach((c, i) => {
+    const startTime = i * staggerDelay;
+    
+    masterTimeline.fromTo(c, {
+      radius: parseFloat(startRadiusVal)
+    }, {
+      radius: maxRadius,
+      duration: duration,
+      ease: "power2.out" 
+    }, startTime);
 
-  if (currentPattern === 'venn') {
-    const shift = 50; 
-    animationTimeline.to(circles, {
-      y: (i, t) => t.type === 'vennTop' ? t.baseY + shift : (t.type === 'vennBottom' ? t.baseY - shift : t.baseY),
-      duration: breathDuration, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: staggerTime, from: "center" }
-    }, 1.0); 
-  } else {
-    animationTimeline.to(circles, {
-      y: (i, t) => t.baseY + (i % 2 === 0 ? 15 : -15), 
-      duration: breathDuration, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: staggerTime, from: "center" }
-    }, 1.0);
-  }
-
-  animationTimeline.to(circles, {
-    scale: 0.92, duration: breathDuration, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: staggerTime, from: "center" }
-  }, 1.0);
+    masterTimeline.fromTo(c, {
+      alpha: 0
+    }, {
+      alpha: 1,
+      duration: duration * 0.05, 
+      ease: "none"
+    }, startTime).to(c, {
+      alpha: 0,
+      duration: duration * 0.1,
+      ease: "power2.in" 
+    }, startTime + (duration * 0.9));
+  });
 }
 
 function drawBackground() {
@@ -360,52 +292,67 @@ function renderFrame() {
 
   const c1Rgb = hexToRgb(currentColor1);
   const c2Rgb = hexToRgb(currentColor2);
-  
-  let baseDotSize = parseFloat(dotSizeVal);
 
   if (circles.length === 0) return;
 
-  let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0;
-  circles.forEach(c => {
-    const maxStretch = Math.max(1, c.squashY);
-    const pad = (c.baseR * c.scale * maxStretch) + (CELL_SIZE * 2);
-    minX = Math.min(minX, c.x - pad); maxX = Math.max(maxX, c.x + pad);
-    minY = Math.min(minY, c.y - pad); maxY = Math.max(maxY, c.y + pad);
-  });
+  const scale = canvas.width / 1920;
+  const cellSize = BASE_CELL_SIZE * scale;
+  const ringThickness = parseFloat(thicknessVal) * scale;
+  let baseDotSize = parseFloat(dotSizeVal) * scale;
 
-  const startCol = Math.max(0, Math.floor(minX / CELL_SIZE)), endCol = Math.min(Math.ceil(canvas.width / CELL_SIZE), Math.ceil(maxX / CELL_SIZE));
-  const startRow = Math.max(0, Math.floor(minY / CELL_SIZE)), endRow = Math.min(Math.ceil(canvas.height / CELL_SIZE), Math.ceil(maxY / CELL_SIZE));
+  const cols = Math.ceil(canvas.width / cellSize);
+  const rows = Math.ceil(canvas.height / cellSize);
+  const maxR = Math.max(canvas.width, canvas.height);
 
-  for (let gy = startRow; gy <= endRow; gy++) {
-    for (let gx = startCol; gx <= endCol; gx++) {
-      const px = gx * CELL_SIZE + CELL_SIZE / 2, py = gy * CELL_SIZE + CELL_SIZE / 2;
-      let hitCircle = null, hitDx = 0, highestLight = 0;
+  for (let gy = 0; gy <= rows; gy++) {
+    for (let gx = 0; gx <= cols; gx++) {
+      const px = gx * cellSize + cellSize / 2;
+      const py = gy * cellSize + cellSize / 2;
+      
+      let highestLight = 0;
+      let hitDx = 0;
 
-      for (let j = circles.length - 1; j >= 0; j--) {
+      const cellNoise = (Math.sin(gx * 12.9898 + gy * 78.233) * 43758.5453) % 1;
+      const sizeVariation = 0.4 + Math.abs(cellNoise) * 1.2; 
+
+      for (let j = 0; j < circles.length; j++) {
         const c = circles[j];
-        if (c.scale <= 0.01) continue;
+        if (c.alpha <= 0.01) continue;
 
-        const dx = px - c.x, dy = py - c.y;
-        const cosA = Math.cos(-c.rotation), sinA = Math.sin(-c.rotation);
-        const rdx = dx * cosA - dy * sinA;
-        const rdy = (dx * sinA + dy * cosA) / c.squashY;
+        const dx = px - c.x;
+        const dy = py - c.y;
+        
+        // Dynamic Squash (Circle to Oval)
+        const squashProgress = Math.min(1, c.radius / (maxR * 0.7)); 
+        const dynamicSquash = 1.0 + (0.8 * Math.pow(squashProgress, 0.8)); 
 
-        const dist = Math.sqrt(rdx * rdx + rdy * rdy);
-        const currentR = c.baseR * c.scale;
+        const dist = Math.hypot(dx, dy * dynamicSquash);
+        const distToRing = Math.abs(dist - c.radius);
+        const effectiveThickness = Math.min(ringThickness, c.radius * 0.8);
 
-        if (dist <= currentR) {
-          hitCircle = c; hitDx = dx; 
-          highestLight = Math.max(highestLight, Math.pow(1 - (dist / currentR), 0.65));
-          break; 
+        if (distToRing < effectiveThickness) {
+          hitDx = dx; 
+          
+          // --- SPATIAL FADE MATH (Inner vs Outer Contrast) ---
+          const fadeProgress = Math.min(1, c.radius / maxR);
+          const spatialFadeExponent = opacityVal * 5.0; 
+          const spatialFade = Math.pow(1.0 - fadeProgress, spatialFadeExponent);
+
+          const ringShape = Math.pow(1 - (distToRing / effectiveThickness), 0.7);
+          
+          const intensity = ringShape * c.alpha * spatialFade;
+          highestLight = Math.max(highestLight, intensity);
         }
       }
 
-      if (hitCircle && highestLight >= 0.1) {
-        const mix = Math.max(0, Math.min(1, (hitDx / (hitCircle.baseR * hitCircle.scale) + 1) * 0.5));
-        ctx.fillStyle = `rgba(${c1Rgb.r + (c2Rgb.r - c1Rgb.r) * mix}, ${c1Rgb.g + (c2Rgb.g - c1Rgb.g) * mix}, ${c1Rgb.b + (c2Rgb.b - c1Rgb.b) * mix}, ${0.55 + highestLight * 0.45})`;
+      if (highestLight >= 0.05) {
+        const finalAlpha = highestLight; 
+        const mix = Math.max(0, Math.min(1, (hitDx / (canvas.width * 0.5) + 1) * 0.5));
+        
+        ctx.fillStyle = `rgba(${c1Rgb.r + (c2Rgb.r - c1Rgb.r) * mix}, ${c1Rgb.g + (c2Rgb.g - c1Rgb.g) * mix}, ${c1Rgb.b + (c2Rgb.b - c1Rgb.b) * mix}, ${finalAlpha})`;
         
         ctx.beginPath();
-        let dynamicRadius = Math.max(1, baseDotSize * highestLight); 
+        let dynamicRadius = Math.max(0.5 * scale, baseDotSize * highestLight * sizeVariation); 
         ctx.arc(px, py, dynamicRadius, 0, Math.PI * 2);
         ctx.fill();
       }
@@ -421,11 +368,12 @@ function renderLoop() {
 }
 
 // --- VIDEO EXPORT ENGINE ---
-const exportVideoBtn = document.getElementById('exportBtn'); 
+const exportHdBtn = document.getElementById('exportHdBtn'); 
+const export4kBtn = document.getElementById('export4kBtn'); 
 const exportPngBtn = document.getElementById('exportPngBtn');
 const recordingStatus = document.getElementById('recordingStatus');
 
-async function startVideoExport() {
+async function startVideoExport(exportWidth, exportHeight, activeBtn) {
   if (isRecordingVideo) return;
   if (typeof WebMMuxer === 'undefined' || typeof VideoEncoder === 'undefined') {
     alert("Browser does not support offline video encoding.");
@@ -433,22 +381,35 @@ async function startVideoExport() {
   }
 
   isRecordingVideo = true;
-  exportVideoBtn.disabled = true;
-  exportVideoBtn.innerText = "Preparing...";
-  recordingStatus.classList.remove('hidden');
-  recordingStatus.innerText = "🔴 Rendering 2K...";
+  activeBtn.disabled = true;
+  const originalBtnText = activeBtn.innerText;
+  activeBtn.innerText = "Preparing...";
+  
+  exportHdBtn.disabled = true;
+  export4kBtn.disabled = true;
 
-  const origW = canvas.width; const origH = canvas.height;
-  canvas.width = 2560; canvas.height = 1440;
+  recordingStatus.classList.remove('hidden');
+  recordingStatus.innerText = `🔴 Rendering ${exportWidth}x${exportHeight}...`;
+
+  const origW = window.innerWidth;
+  const origH = window.innerHeight;
+  
+  canvas.width = exportWidth;
+  canvas.height = exportHeight;
+
   initCircles();
   playAnimation();
-  animationTimeline.pause();
+  masterTimeline.pause();
   
-  const fps = 60; const durationSecs = 6.0; const totalFrames = fps * durationSecs;
+  const fps = 60; 
+  const totalDuration = masterTimeline.duration() + 0.5; 
+  const totalFrames = Math.ceil(fps * totalDuration);
+
+  const videoBitrate = exportWidth > 2000 ? 50_000_000 : 25_000_000;
 
   let muxer = new WebMMuxer.Muxer({
     target: new WebMMuxer.ArrayBufferTarget(),
-    video: { codec: 'V_VP9', width: 2560, height: 1440, frameRate: fps }
+    video: { codec: 'V_VP9', width: exportWidth, height: exportHeight, frameRate: fps }
   });
 
   let videoEncoder = new VideoEncoder({
@@ -456,26 +417,36 @@ async function startVideoExport() {
     error: e => console.error("Encoding error:", e)
   });
 
-  videoEncoder.configure({ codec: 'vp09.00.10.08', width: 2560, height: 1440, bitrate: 25_000_000, framerate: fps });
+  videoEncoder.configure({ 
+    codec: 'vp09.00.10.08', 
+    width: exportWidth, 
+    height: exportHeight, 
+    bitrate: videoBitrate, 
+    framerate: fps 
+  });
 
   await new Promise((resolve) => {
     let frameIdx = 0;
     function encodeNextBatch() {
       if (frameIdx >= totalFrames) { resolve(); return; }
+      
       if (videoEncoder.encodeQueueSize > 20) { setTimeout(encodeNextBatch, 20); return; }
 
-      const batchLimit = Math.min(frameIdx + 5, totalFrames);
-      for (; frameIdx < batchLimit; frameIdx++) {
-        const time = frameIdx / fps;
-        animationTimeline.totalTime(time);
-        globalTime = time; 
-        renderFrame();
-        let frame = new VideoFrame(canvas, { timestamp: time * 1e6 });
-        videoEncoder.encode(frame, { keyFrame: frameIdx % 60 === 0 });
-        frame.close();
-      }
-      recordingStatus.innerText = `🔴 Rendering 2K... ${Math.floor((frameIdx / totalFrames) * 100)}%`;
-      setTimeout(encodeNextBatch, 0); 
+      const time = frameIdx / fps;
+      masterTimeline.totalTime(time);
+      globalTime = time; 
+      
+      renderFrame();
+      
+      let frame = new VideoFrame(canvas, { timestamp: time * 1e6 });
+      videoEncoder.encode(frame, { keyFrame: frameIdx % 60 === 0 });
+      frame.close();
+      
+      frameIdx++;
+      
+      recordingStatus.innerText = `🔴 Rendering ${exportWidth}x${exportHeight}... ${Math.floor((frameIdx / totalFrames) * 100)}%`;
+      
+      setTimeout(encodeNextBatch, 5); 
     }
     encodeNextBatch();
   });
@@ -486,54 +457,54 @@ async function startVideoExport() {
   let blob = new Blob([muxer.target.buffer], { type: 'video/webm' });
   let url = URL.createObjectURL(blob);
   let a = document.createElement('a'); a.href = url;
-  a.download = `MotionExport_2K_${Date.now()}.webm`; a.click();
+  a.download = `MotionExport_${exportWidth}x${exportHeight}_${Date.now()}.webm`; 
+  a.click();
   URL.revokeObjectURL(url);
 
-  canvas.width = origW; canvas.height = origH;
+  canvas.width = origW; 
+  canvas.height = origH;
+  
   initCircles();
   isRecordingVideo = false;
-  exportVideoBtn.disabled = false; exportVideoBtn.innerText = "Export 2K";
+  
+  exportHdBtn.disabled = false; 
+  export4kBtn.disabled = false;
+  activeBtn.innerText = originalBtnText;
   recordingStatus.classList.add('hidden');
+  
   playAnimation(); 
   rafId = requestAnimationFrame(renderLoop);
 }
 
-exportVideoBtn.addEventListener('click', startVideoExport);
-
-exportPngBtn.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.download = `snapshot_${Date.now()}.png`; link.href = canvas.toDataURL('image/png'); link.click();
-});
+exportHdBtn.addEventListener('click', () => startVideoExport(1920, 1080, exportHdBtn));
+export4kBtn.addEventListener('click', () => startVideoExport(3840, 2160, export4kBtn));
 
 // --- INIT UI BINDINGS ---
 document.getElementById('restartBtn').addEventListener('click', playAnimation);
-window.addEventListener('resize', () => { if(isPreviewing && !isRecordingVideo) { resizeCanvas(); initCircles(); } });
+
+window.addEventListener('resize', () => {
+  if(!isRecordingVideo) {
+    setupInitialCanvas();
+    initCircles();
+    playAnimation();
+  }
+});
 
 // Bootstrap UI
 document.addEventListener('DOMContentLoaded', () => {
-  const modeItems = [
-    {label: 'Concentric', value: 'concentric'},
-    {label: 'Vertical Venn (Organic)', value: 'venn'},
-    {label: 'Vertical Stack', value: 'vertical'},
-    {label: 'Phyllotaxis Spiral', value: 'phyll'},
-    {label: 'Infinity (Lemniscate)', value: 'infinity'}
-  ];
-  applyDropdown('select-pattern', modeItems, currentPattern, (v) => { currentPattern = v; updateAndPlay(); });
-
-  const aspectItems = [
-    {label: 'Fill Screen', value: 'fill'}, {label: '16:9 (Landscape)', value: '16:9'},
-    {label: '1:1 (Square)', value: '1:1'}, {label: '9:16 (Portrait)', value: '9:16'}, {label: '4:3 (Standard)', value: '4:3'}
-  ];
-  applyDropdown('select-aspect', aspectItems, currentAspectRatio, (v) => { currentAspectRatio = v; updateAndPlay(); });
-
-  applyCustomSlider('complexity', { min: 1, max: 40, step: 1, val: numCirclesVal, onChange: (v) => { numCirclesVal = v; updateAndPlay(); }});
-  applyCustomSlider('scale', { min: 0.4, max: 0.95, step: 0.05, val: scaleFactorVal, onChange: (v) => { scaleFactorVal = v; updateAndPlay(); }});
-  applyCustomSlider('spread', { min: 0.5, max: 4.0, step: 0.1, val: spreadFactorVal, onChange: (v) => { spreadFactorVal = v; updateAndPlay(); }});
-  applyCustomSlider('dotsize', { min: 1, max: 10, step: 0.5, val: dotSizeVal, onChange: (v) => { dotSizeVal = v; if(isPreviewing) renderFrame(); }});
+  applyCustomSlider('complexity', { min: 1, max: 20, step: 1, val: numCirclesVal, onChange: (v) => { numCirclesVal = v; updateAndPlay(); }});
+  applyCustomSlider('speed', { min: 0.2, max: 3.0, step: 0.1, val: speedVal, onChange: (v) => { speedVal = v; updateAndPlay(); }});
+  applyCustomSlider('spacing', { min: 0.2, max: 3.0, step: 0.1, val: spacingVal, onChange: (v) => { spacingVal = v; updateAndPlay(); }});
+  
+  applyCustomSlider('opacity', { min: 0.0, max: 1.0, step: 0.05, val: opacityVal, onChange: (v) => { opacityVal = v; updateAndPlay(); }});
+  applyCustomSlider('dotsize', { min: 1, max: 10, step: 0.5, val: dotSizeVal, onChange: (v) => { dotSizeVal = v; updateAndPlay(); }});
+  applyCustomSlider('thickness', { min: 10, max: 200, step: 1, val: thicknessVal, onChange: (v) => { thicknessVal = v; updateAndPlay(); }});
+  
+  applyCustomSlider('startradius', { min: 0, max: 200, step: 1, val: startRadiusVal, onChange: (v) => { startRadiusVal = v; updateAndPlay(); }});
 
   renderColorRows();
-  
-  resizeCanvas();
+  checkTheme(); // Initialize theme on load
+  setupInitialCanvas();
   initCircles();
   playAnimation();
   renderLoop();
