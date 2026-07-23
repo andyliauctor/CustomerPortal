@@ -17,7 +17,6 @@ const BASE_CELL_SIZE = 10;
 let numCirclesVal = 3;
 let speedVal = .60;
 let sizeVal = 1.0;     // NEW: Overall size multiplier
-let spacingVal = 0.20; 
 let easingVal = .60; 
 let opacityVal = 0.20; 
 let dotSizeVal = 3.50;
@@ -262,8 +261,6 @@ function playAnimation() {
   
   // Multiply max radius by the new sizeVal
   const maxRadius = (Math.hypot(canvas.width / 2, canvas.height / 2) + 150) * sizeVal;
-  
-  const maxStagger = (circles.length > 1 ? circles.length - 1 : 1) * ((duration / circles.length) * spacingVal);
 
   circles.forEach((c, i) => {
     const progress = circles.length > 1 ? i / (circles.length - 1) : 0;
@@ -511,7 +508,6 @@ document.addEventListener('DOMContentLoaded', () => {
   applyCustomSlider('size', { min: 0.1, max: 3.0, step: 0.1, val: sizeVal, onChange: (v) => { sizeVal = v; updateAndPlay(); }});
   
   applyCustomSlider('speed', { min: 0.2, max: 3.0, step: 0.1, val: speedVal, onChange: (v) => { speedVal = v; updateAndPlay(); }});
-  applyCustomSlider('spacing', { min: 0.2, max: 3.0, step: 0.1, val: spacingVal, onChange: (v) => { spacingVal = v; updateAndPlay(); }});
   applyCustomSlider('easing', { min: 0.1, max: 3.0, step: 0.1, val: easingVal, onChange: (v) => { easingVal = v; updateAndPlay(); }});
   applyCustomSlider('opacity', { min: 0.0, max: 1.0, step: 0.05, val: opacityVal, onChange: (v) => { opacityVal = v; updateAndPlay(); }});
   applyCustomSlider('dotsize', { min: 1, max: 10, step: 0.5, val: dotSizeVal, onChange: (v) => { dotSizeVal = v; updateAndPlay(); }});
