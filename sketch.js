@@ -15,9 +15,10 @@ const BASE_CELL_SIZE = 10;
 
 // --- GENERATOR STATE VARIABLES ---
 let numCirclesVal = 3;
-let speedVal = .90;
+let speedVal = .60;
+let sizeVal = 1.0;     // NEW: Overall size multiplier
 let spacingVal = 0.20; 
-let easingVal = .60; // Acts as an exponent curve for the spacing distribution
+let easingVal = .60; 
 let opacityVal = 0.20; 
 let dotSizeVal = 3.50;
 let thicknessVal = 175; 
@@ -60,7 +61,7 @@ function applyCustomSlider(slotId, cfg) {
     const pct = (val - cfg.min) / (cfg.max - cfg.min);
     fill.style.width = `calc(${pct * 100}% - ${pct * 10}px + 5px)`;
     thumb.style.left = `calc(${pct * 100}% - ${pct * 10}px)`;
-    if (valDisplay) valDisplay.innerText = Number(val).toFixed(cfg.step < 1 ? 2 : 1); // Allow 1 decimal place
+    if (valDisplay) valDisplay.innerText = Number(val).toFixed(cfg.step < 1 ? 2 : 1); 
   }
 
   function calculateValue(clientX) {
@@ -240,7 +241,12 @@ function initCircles() {
 
 function playAnimation() {
   if (masterTimeline) masterTimeline.kill();
-  masterTimeline = gsap.timeline();
+  
+  // Set timeline to loop seamlessly (0 delay)
+  masterTimeline = gsap.timeline({
+    repeat: isRecordingVideo ? 0 : -1,
+    repeatDelay: 0.0 
+  });
   
   gsap.killTweensOf(circles);
   
@@ -251,20 +257,17 @@ function playAnimation() {
   
   globalTime = 0; 
 
-  const duration = 6.0 / speedVal;
-  const maxRadius = Math.max(canvas.width, canvas.height);
+  // Reduce base duration since we're no longer animating far off-screen
+  const duration = 3.5 / speedVal; 
   
-  // Calculate the maximum possible stagger window based on spacing value
+  // Multiply max radius by the new sizeVal
+  const maxRadius = (Math.hypot(canvas.width / 2, canvas.height / 2) + 150) * sizeVal;
+  
   const maxStagger = (circles.length > 1 ? circles.length - 1 : 1) * ((duration / circles.length) * spacingVal);
 
   circles.forEach((c, i) => {
-    // Normalize position in the sequence from 0.0 to 1.0
     const progress = circles.length > 1 ? i / (circles.length - 1) : 0;
-    
-    // Apply the spatial easing exponent to determine the spawn distribution
     const curve = Math.pow(progress, parseFloat(easingVal)); 
-    
-    // This dynamically clusters the start times, creating true spacing differences between rings
     const startTime = curve * maxStagger;
     
     masterTimeline.fromTo(c, {
@@ -272,7 +275,7 @@ function playAnimation() {
     }, {
       radius: maxRadius,
       duration: duration,
-      ease: "power2.out" // Restore the natural physics of a ripple
+      ease: "power2.out" 
     }, startTime);
 
     masterTimeline.fromTo(c, {
@@ -310,7 +313,9 @@ function renderFrame() {
 
   const cols = Math.ceil(canvas.width / cellSize);
   const rows = Math.ceil(canvas.height / cellSize);
-  const maxR = Math.max(canvas.width, canvas.height);
+  
+  // Scale the boundary tracking proportionally so fading still works smoothly
+  const maxR = (Math.hypot(canvas.width / 2, canvas.height / 2) + 150) * sizeVal;
 
   for (let gy = 0; gy <= rows; gy++) {
     for (let gx = 0; gx <= cols; gx++) {
@@ -410,7 +415,8 @@ async function startVideoExport(exportWidth, exportHeight, activeBtn) {
   masterTimeline.pause();
   
   const fps = 60; 
-  const totalDuration = masterTimeline.duration() + 0.5; 
+  // Add 1.0 second pause solely to the exported video's duration
+  const totalDuration = masterTimeline.duration() + 1.0; 
   const totalFrames = Math.ceil(fps * totalDuration);
 
   const videoBitrate = exportWidth > 2000 ? 50_000_000 : 25_000_000;
@@ -488,7 +494,6 @@ exportHdBtn.addEventListener('click', () => startVideoExport(1920, 1080, exportH
 export4kBtn.addEventListener('click', () => startVideoExport(3840, 2160, export4kBtn));
 
 // --- INIT UI BINDINGS ---
-document.getElementById('restartBtn').addEventListener('click', playAnimation);
 
 window.addEventListener('resize', () => {
   if(!isRecordingVideo) {
@@ -501,16 +506,16 @@ window.addEventListener('resize', () => {
 // Bootstrap UI
 document.addEventListener('DOMContentLoaded', () => {
   applyCustomSlider('complexity', { min: 1, max: 20, step: 1, val: numCirclesVal, onChange: (v) => { numCirclesVal = v; updateAndPlay(); }});
+  
+  // NEW: Size slider binding
+  applyCustomSlider('size', { min: 0.1, max: 3.0, step: 0.1, val: sizeVal, onChange: (v) => { sizeVal = v; updateAndPlay(); }});
+  
   applyCustomSlider('speed', { min: 0.2, max: 3.0, step: 0.1, val: speedVal, onChange: (v) => { speedVal = v; updateAndPlay(); }});
   applyCustomSlider('spacing', { min: 0.2, max: 3.0, step: 0.1, val: spacingVal, onChange: (v) => { spacingVal = v; updateAndPlay(); }});
-  
-  // Adjusted range from 0.1 (strong outer clump) to 3.0 (strong inner clump)
   applyCustomSlider('easing', { min: 0.1, max: 3.0, step: 0.1, val: easingVal, onChange: (v) => { easingVal = v; updateAndPlay(); }});
-  
   applyCustomSlider('opacity', { min: 0.0, max: 1.0, step: 0.05, val: opacityVal, onChange: (v) => { opacityVal = v; updateAndPlay(); }});
   applyCustomSlider('dotsize', { min: 1, max: 10, step: 0.5, val: dotSizeVal, onChange: (v) => { dotSizeVal = v; updateAndPlay(); }});
   applyCustomSlider('thickness', { min: 10, max: 200, step: 1, val: thicknessVal, onChange: (v) => { thicknessVal = v; updateAndPlay(); }});
-  
   applyCustomSlider('startradius', { min: 0, max: 200, step: 1, val: startRadiusVal, onChange: (v) => { startRadiusVal = v; updateAndPlay(); }});
 
   renderColorRows();
